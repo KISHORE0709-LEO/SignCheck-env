@@ -1,156 +1,203 @@
 import os
+import sys
 import time
 import json
-import asyncio
 import requests
-from typing import List, Dict, Any
+from typing import List, Optional
 from openai import OpenAI
 
-API_BASE_URL = os.getenv('API_BASE_URL', 'https://api.openai.com/v1')
-MODEL_NAME = os.getenv('MODEL_NAME', 'gpt-4o-mini')
-API_KEY = os.getenv('HF_TOKEN', '')
+# ── Config ──────────────────────────────────────────────────
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME   = os.getenv("MODEL_NAME",   "gpt-4o-mini")
+API_KEY      = os.getenv("HF_TOKEN",     "")
+BASE_URL     = os.getenv("SIGNCHECK_URL","http://localhost:7860")
+MAX_STEPS    = 25
 
-MAX_STEPS = 25
-TEMPERATURE = 0.0
-MAX_TOKENS = 512
-SUCCESS_THRESHOLD = 0.6
-BASE_URL = os.getenv('SIGNCHECK_URL', 'http://localhost:7860')
-
-VALID_ACTIONS = [
-    "SOUND_WARD_ALARM", "CALL_ATTENDING_DOCTOR", "CALL_ICU_SPECIALIST", 
-    "CALL_CODE_BLUE", "CHECK_EQUIPMENT", "CHECK_PATIENT_AIRWAY", 
-    "REPOSITION_PATIENT", "START_MANUAL_BAGGING", "ADJUST_OXYGEN_FLOW", 
-    "SILENCE_ALARM", "CHECK_IV_LINE", "ADMINISTER_EMERGENCY_MED", 
+ACTIONS = [
+    "SOUND_WARD_ALARM", "CALL_ATTENDING_DOCTOR", "CALL_ICU_SPECIALIST",
+    "CALL_CODE_BLUE", "CHECK_EQUIPMENT", "CHECK_PATIENT_AIRWAY",
+    "REPOSITION_PATIENT", "START_MANUAL_BAGGING", "ADJUST_OXYGEN_FLOW",
+    "SILENCE_ALARM", "CHECK_IV_LINE", "ADMINISTER_EMERGENCY_MED",
     "WAIT_AND_MONITOR"
 ]
 
-SYSTEM_PROMPT = """You are an AI first-responder agent monitoring an ICU patient's vitals. 
-Your goal is to triage the patient appropriately, stabilize critical vitals, investigate anomalies, and escalate correctly. 
-You must choose exactly ONE action per turn from the allowed Action enum. 
-Respond ONLY with the exact text of the action. Do NOT provide any explanation or extra text."""
+SYSTEM_PROMPT = """You are an ICU nurse AI acting as first responder.
+A medical emergency is occurring and the doctor is not present.
+You must stabilize the patient until the doctor arrives.
 
-def log_start(task_id: int, task_name: str, model: str):
-    unix_time = int(time.time())
-    print(f"[START] task={task_id} task_name={task_name} model={model} timestamp={unix_time}", flush=True)
+Each turn you will receive patient vitals, equipment status, and clinical notes.
+You must respond with EXACTLY ONE action from this list, nothing else:
 
-def log_step(step: int, action: str, reward: float, done: bool, error: str):
-    print(f"[STEP] step={step} action={action} reward={reward:.3f} done={done} error={error}", flush=True)
+SOUND_WARD_ALARM       - Sound the ward alarm to alert nearby staff
+CALL_ATTENDING_DOCTOR  - Call the attending doctor (routine escalation)
+CALL_ICU_SPECIALIST    - Call the ICU specialist (equipment/ventilator issues)
+CALL_CODE_BLUE         - Declare Code Blue (cardiac/life-threatening emergency)
+CHECK_EQUIPMENT        - Check all equipment for faults or alarms
+CHECK_PATIENT_AIRWAY   - Check patient airway patency
+REPOSITION_PATIENT     - Reposition patient to improve breathing
+START_MANUAL_BAGGING   - Start manual bag-valve-mask ventilation
+ADJUST_OXYGEN_FLOW     - Adjust supplemental oxygen flow rate
+SILENCE_ALARM          - Silence a non-critical alarm
+CHECK_IV_LINE          - Check IV line for occlusion or infiltration
+ADMINISTER_EMERGENCY_MED - Administer emergency medication (HIGH RISK)
+WAIT_AND_MONITOR       - Wait and continue monitoring (use sparingly)
+
+Rules:
+- Respond with ONLY the action name, no punctuation, no explanation
+- Read clinical notes carefully before acting
+- Prioritize patient safety over speed
+- Call the RIGHT person: Code Blue for cardiac, ICU Specialist for equipment, Attending for general
+- Check before you treat — verify the cause before intervening
+"""
+
+# ── Logging ─────────────────────────────────────────────────
+def log_start(task_id: str, task_name: str, model: str):
+    print(f"[START] task={task_id} task_name={task_name} model={model} timestamp={int(time.time())}", flush=True)
+
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]):
+    err = error if error else "null"
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={err}", flush=True)
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]):
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     mean = sum(rewards) / len(rewards) if rewards else 0.0
-    print(f"[END] success={success} steps={steps} score={score:.3f} mean_reward={mean:.3f} rewards={rewards}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} mean_reward={mean:.2f} rewards={rewards_str}", flush=True)
 
-def build_user_prompt(obs_dict: Dict[str, Any], step: int, last_reward: float, action_history: List[str]) -> str:
-    prompt = f"--- Step {step} ---\n"
-    prompt += f"Observation:\n{json.dumps(obs_dict, indent=2)}\n\n"
-    prompt += f"Action History:\n{action_history}\n\n"
-    prompt += f"Last Reward: {last_reward:.3f}\n\n"
-    prompt += "Allowed Actions: " + ", ".join(VALID_ACTIONS) + "\n\n"
-    prompt += "Output strictly the chosen Action:"
-    return prompt
+# ── Agent ────────────────────────────────────────────────────
+def build_user_prompt(obs: dict, step: int, last_reward: float, history: List[str]) -> str:
+    history_str = " → ".join(history[-5:]) if history else "None"
+    return f"""=== STEP {step} ===
+VITALS:
+  SpO2:          {obs['spo2']}%
+  Heart Rate:    {obs['heart_rate']} bpm
+  BP:            {obs['bp_systolic']}/{obs['bp_diastolic']} mmHg
+  Resp Rate:     {obs['resp_rate']} breaths/min
+  Temperature:   {obs['temperature']}°C
+  Consciousness: {obs['consciousness']}
 
-def get_model_action(client: OpenAI, obs_dict: Dict[str, Any], step: int, last_reward: float, action_history: List[str]) -> str:
-    user_prompt = build_user_prompt(obs_dict, step, last_reward, action_history)
+EQUIPMENT: {json.dumps(obs['equipment_status'], indent=2)}
+POWER:     {obs['power_status']}
+DOCTOR ETA: {obs.get('doctor_eta', 'Not called yet')} steps
+
+CLINICAL NOTES:
+{obs['clinical_notes']}
+
+LAST ACTION RESULT: {obs['last_action_feedback']}
+LAST REWARD: {last_reward:.2f}
+RECENT ACTIONS: {history_str}
+PATIENT STATUS: {obs['patient_outcome']}
+
+Choose your next action:"""
+
+def get_model_action(client: OpenAI, obs: dict, step: int, last_reward: float, history: List[str]) -> str:
+    prompt = build_user_prompt(obs, step, last_reward, history)
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
+                {"role": "user",   "content": prompt}
             ],
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS
+            max_tokens=20,
+            temperature=0.0
         )
-        action_str = response.choices[0].message.content.strip()
-        
-        for act in VALID_ACTIONS:
-            if act in action_str:
-                return act
-                
+        raw = response.choices[0].message.content.strip().upper()
+        # Clean up any extra text
+        for action in ACTIONS:
+            if action in raw:
+                return action
         return "WAIT_AND_MONITOR"
     except Exception as e:
-        print(f"Error calling OpenAI API: {e}")
         return "WAIT_AND_MONITOR"
 
-def run_task(client: OpenAI, task_id: int) -> float:
-    res = requests.post(f"{BASE_URL}/reset", json={"task_id": task_id})
-    if res.status_code != 200:
-        print(f"Error resetting environment: {res.text}")
-        return 0.0
-        
-    reset_data = res.json()
-    obs = reset_data["observation"]
-    task_desc = reset_data["task_description"]
-    
-    log_start(task_id, task_desc, MODEL_NAME)
-    
-    done = False
-    step = 0
-    last_reward = 0.0
+# ── Task Runner ──────────────────────────────────────────────
+def run_task(client: OpenAI, task_id: int) -> dict:
+    # Reset
+    try:
+        r = requests.post(f"{BASE_URL}/reset", json={"task_id": task_id}, timeout=30)
+        r.raise_for_status()
+        reset_data = r.json()
+    except Exception as e:
+        print(f"[ERROR] Failed to reset task {task_id}: {e}", flush=True)
+        return {"task_id": task_id, "score": 0.0, "success": False, "steps": 0}
+
+    obs       = reset_data["observation"]
+    task_name = reset_data["task_description"][:40].replace(" ", "_")
+
+    log_start(str(task_id), task_name, MODEL_NAME)
+
+    rewards        = []
     action_history = []
-    rewards = []
-    
+    last_reward    = 0.0
+    done           = False
+    step           = 0
+    last_error     = None
+
     while not done and step < MAX_STEPS:
         step += 1
-        
         action = get_model_action(client, obs, step, last_reward, action_history)
-        
-        step_res = requests.post(f"{BASE_URL}/step", json={"action": action})
-        if step_res.status_code != 200:
-            error_msg = str(step_res.text)
-            log_step(step, action, 0.0, True, error_msg)
-            break
-            
-        step_data = step_res.json()
-        obs = step_data["observation"]
-        last_reward = step_data.get("reward", 0.0)
-        done = step_data.get("done", False)
-        
-        rewards.append(last_reward)
-        action_history.append(action)
-        
-        log_step(step, action, last_reward, done, "")
-        
-    grade_res = requests.post(f"{BASE_URL}/grade")
-    if grade_res.status_code == 200:
-        grade_data = grade_res.json()
-        final_score = grade_data["final_score"]
-        passed = grade_data["passed"]
-    else:
-        final_score = sum(rewards) / max(len(rewards), 1)
-        passed = False
-        
-    log_end(passed, step, final_score, rewards)
-    return final_score
 
-def main():
-    for _ in range(5):
         try:
-            health = requests.get(f"{BASE_URL}/health")
-            if health.status_code == 200:
-                break
-        except requests.exceptions.ConnectionError:
-            time.sleep(1)
-            
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY if API_KEY else "dummy_key")
-    
-    print(f"Starting Inference Evaluation against OpenEnv Server: {BASE_URL}")
-    print("-" * 50)
-    
-    scores = {}
+            r = requests.post(f"{BASE_URL}/step", json={"action": action}, timeout=30)
+            r.raise_for_status()
+            step_data = r.json()
+
+            obs         = step_data["observation"]
+            reward      = step_data["reward"]
+            done        = step_data["done"]
+            last_error  = step_data["info"].get("outcome") if done else None
+            last_reward = reward
+
+            rewards.append(reward)
+            action_history.append(action)
+            log_step(step, action, reward, done, None)
+
+        except Exception as e:
+            last_error = str(e)
+            log_step(step, action, 0.0, True, last_error)
+            break
+
+    # Grade
+    score = 0.0
+    try:
+        r = requests.post(f"{BASE_URL}/grade", timeout=30)
+        r.raise_for_status()
+        grade_data = r.json()
+        score      = grade_data["final_score"]
+        success    = grade_data["passed"]
+    except Exception as e:
+        success = False
+
+    log_end(success, step, score, rewards)
+    return {"task_id": task_id, "score": score, "success": success, "steps": step}
+
+# ── Main ─────────────────────────────────────────────────────
+def main():
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+
+    print("\n" + "="*60, flush=True)
+    print("SignCheck-env Baseline Inference", flush=True)
+    print("="*60 + "\n", flush=True)
+
+    results = []
     for task_id in [1, 2, 3]:
-        score = run_task(client, task_id)
-        scores[task_id] = score
-        
-    print("\n" + "=" * 40)
-    print("FINAL EVALUATION SUMMARY")
-    print("=" * 40)
-    print(f"{'Task ID':<10} | {'Score':<10} | {'Status':<10}")
-    print("-" * 40)
-    for t_id, s in scores.items():
-        status = "PASSED" if s >= SUCCESS_THRESHOLD else "FAILED"
-        print(f"{t_id:<10} | {s:<10.3f} | {status:<10}")
-    print("=" * 40)
+        print(f"\n{'='*60}", flush=True)
+        result = run_task(client, task_id)
+        results.append(result)
+        time.sleep(1)
+
+    # Summary
+    print("\n" + "="*60, flush=True)
+    print("FINAL RESULTS SUMMARY", flush=True)
+    print("="*60, flush=True)
+    print(f"{'Task':<8} {'Score':<10} {'Passed':<10} {'Steps'}", flush=True)
+    print("-"*40, flush=True)
+    for r in results:
+        passed = "✅" if r["success"] else "❌"
+        print(f"{r['task_id']:<8} {r['score']:<10.3f} {passed:<10} {r['steps']}", flush=True)
+
+    avg = sum(r["score"] for r in results) / len(results)
+    print(f"\nAverage Score: {avg:.3f}", flush=True)
 
 if __name__ == "__main__":
     main()
