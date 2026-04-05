@@ -24,6 +24,12 @@ if "obs" not in st.session_state:
     st.session_state.obs = None
 if "done" not in st.session_state:
     st.session_state.done = False
+if "last_reward" not in st.session_state:
+    st.session_state.last_reward = 0.0
+if "final_score" not in st.session_state:
+    st.session_state.final_score = None
+if "passed" not in st.session_state:
+    st.session_state.passed = None
 
 def fetch_state():
     try:
@@ -34,6 +40,18 @@ def fetch_state():
         pass
     return None
 
+def trigger_grade():
+    try:
+        r = requests.post(f"{BASE_URL}/grade")
+        if r.status_code == 200:
+            data = r.json()
+            st.session_state.final_score = data["final_score"]
+            st.session_state.passed = data["passed"]
+        else:
+            st.error(f"Failed to grade: {r.text}")
+    except Exception as e:
+        st.error(f"Failed to connect: {e}")
+
 def trigger_reset(task_id):
     try:
         r = requests.post(f"{BASE_URL}/reset", json={"task_id": task_id})
@@ -41,6 +59,9 @@ def trigger_reset(task_id):
             data = r.json()
             st.session_state.obs = data["observation"]
             st.session_state.done = False
+            st.session_state.last_reward = 0.0
+            st.session_state.final_score = None
+            st.session_state.passed = None
             vitals = data["observation"].copy()
             vitals["step"] = 0
             st.session_state.vitals_history = [vitals]
@@ -58,6 +79,7 @@ def trigger_step(action):
             data = r.json()
             st.session_state.obs = data["observation"]
             st.session_state.done = data["done"]
+            st.session_state.last_reward = data.get("reward", 0.0)
             
             step = st.session_state.obs["step_count"]
             vitals = st.session_state.obs.copy()
@@ -85,6 +107,17 @@ selected_action = st.sidebar.selectbox("Select Action", ACTIONS)
 if st.sidebar.button("Next Step", use_container_width=True):
     trigger_step(selected_action)
 
+st.sidebar.metric("Reward", st.session_state.last_reward)
+
+st.sidebar.markdown("---")
+if st.sidebar.button("Score / Grade Episode", use_container_width=True):
+    trigger_grade()
+    
+if st.session_state.final_score is not None:
+    pass_color = "#00ff41" if st.session_state.passed else "#ff4b4b"
+    st.sidebar.markdown(f"**Final Score:** {st.session_state.final_score:.2f}")
+    st.sidebar.markdown(f"**Passed:** <span style='color:{pass_color}'>{st.session_state.passed}</span>", unsafe_allow_html=True)
+
 st.sidebar.markdown("---")
 st.sidebar.subheader("Auto Simulation")
 auto_run = st.sidebar.checkbox("Run Automatically")
@@ -104,7 +137,7 @@ if auto_run and not st.session_state.done and st.session_state.obs is not None:
         elif selected_task == 2: next_action = "CHECK_EQUIPMENT"
         elif selected_task == 3: next_action = "ADMINISTER_EMERGENCY_MED"
     else:
-        if obs["spo2"] < 90: next_action = "ADJUST_OXYGEN_FLOW"
+        if obs.get("spo2", 100) < 90: next_action = "ADJUST_OXYGEN_FLOW"
         else: next_action = "WAIT_AND_MONITOR"
     
     trigger_step(next_action)
@@ -117,6 +150,20 @@ if st.session_state.obs is None:
     st.info("Simulation not initialized. Please click 'Start Simulation' from the Control Panel.")
 else:
     obs = st.session_state.obs
+    
+    st.write("**Simulation Status:**", "COMPLETED" if st.session_state.done else "RUNNING")
+    
+    critical_any = (
+        obs.get("spo2", 100) < 90 or 
+        obs.get("heart_rate", 80) > 120 or 
+        obs.get("heart_rate", 80) < 50 or 
+        obs.get("bp_systolic", 120) < 90 or 
+        obs.get("resp_rate", 16) > 25 or 
+        obs.get("temperature", 37.0) > 38 or 
+        obs.get("consciousness", "Alert") in ["Pain", "Unresponsive"]
+    )
+    if critical_any:
+        st.error("⚠️ CRITICAL CONDITION")
     
     # -- TOP ROW: Vitals Metrics --
     cols = st.columns(6)
