@@ -1,14 +1,71 @@
 name: signcheck_env
+version: "1.0.0"
+description: 'ICU patient monitoring simulation — AI first-responder in the critical gap between medical emergency and doctor arrival'
+author: your-hf-username
+tags: [healthcare, real-world, sequential-decision, safety-critical, icu, triage]
 tasks:
-  - task_id: 1
-    name: "Task 1: Power failure"
+  - id: power_failure
+    task_id: 1
     difficulty: easy
-    description: "Slow vital degradation over ~25 steps requiring backup power transition or alternative care."
-  - task_id: 2
-    name: "Task 2: Ventilator equipment malfunction"
+    max_steps: 30
+    description: "Ward lost power, patient stable but backup systems engaged. Monitor and escalate correctly."
+  - id: equipment_malfunction
+    task_id: 2
     difficulty: medium
-    description: "Agent must distinguish equipment fault from patient fault before intervening."
-  - task_id: 3
-    name: "Task 3: Sudden cardiac event"
+    max_steps: 30
+    description: "Ventilator alarm sounding, must distinguish true failure from sensor error before bagging."
+  - id: cardiac_event
+    task_id: 3
     difficulty: hard
-    description: "Requires correct escalation sequence in ~8 steps before irreversible damage occurs."
+    max_steps: 25
+    description: "Sudden erratic cardiac rhythm. Requires immediate emergency sequencing without triggering wrong escalation traps."
+
+observation_space:
+  spo2: "float | Oxygen saturation (normal 95-100)"
+  heart_rate: "int | Heart beats per minute (normal 60-100)"
+  bp_systolic: "int | Blood pressure systolic (normal 110-130)"
+  bp_diastolic: "int | Blood pressure diastolic (normal 70-85)"
+  resp_rate: "int | Respiratory rate (normal 12-20)"
+  temperature: "float | Body temperature C (normal 36.5-37.5)"
+  consciousness: "str | Level of consciousness via AVPU scale"
+  equipment_status: "dict | Strings tracking states for monitor, ventilator, iv_pump"
+  power_status: "str | Current power infrastructure state"
+  time_elapsed: "int | Number of time steps elapsed"
+  time_since_last_vitals_check: "int | Steps since physical check"
+  doctor_eta: "int | Steps remaining until attending/specialist arrives"
+  clinical_notes: "str | Emulated nurse observation logs"
+  last_action_feedback: "str | Result of previous action taken"
+  step_count: "int | Current absolute step index"
+  patient_outcome: "str | Current outcome tracker (stable/deteriorating/critical/deceased/saved)"
+
+action_space:
+  SOUND_WARD_ALARM: "Activate the general ward level assistance alarm"
+  CALL_ATTENDING_DOCTOR: "Escalate explicitly to the attending physician"
+  CALL_ICU_SPECIALIST: "Escalate to the Intensive Care Specialist"
+  CALL_CODE_BLUE: "Trigger hospital-wide emergency cardiac code"
+  CHECK_EQUIPMENT: "Inspect machinery for occlusion or false alarms"
+  CHECK_PATIENT_AIRWAY: "Physically ensure the patient's airway is unrestricted"
+  REPOSITION_PATIENT: "Shift patient posture to aid breathing"
+  START_MANUAL_BAGGING: "Remove ventilator and provide manual oxygen compression"
+  ADJUST_OXYGEN_FLOW: "Increase the flow rate of the passive oxygen delivery"
+  SILENCE_ALARM: "Mute the active auditory warning"
+  CHECK_IV_LINE: "Verify delivery route of intravenous treatments"
+  ADMINISTER_EMERGENCY_MED: "Provide standard emergency stabilization pharmacology"
+  WAIT_AND_MONITOR: "Take no explicit physical action this step"
+
+reward:
+  min: 0.0
+  max: 1.0
+  type: continuous
+  description: "Per-step composite reward fusing vital stability delta, escalation logic, efficiency penalty, and action bonuses."
+
+api:
+  reset: "POST /reset"
+  step: "POST /step"
+  state: "GET /state"
+  grade: "POST /grade"
+
+baseline_scores:
+  power_failure: 0.0
+  equipment_malfunction: 0.0
+  cardiac_event: 0.0
