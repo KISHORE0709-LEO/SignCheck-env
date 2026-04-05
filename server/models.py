@@ -1,6 +1,6 @@
 from enum import Enum
 from pydantic import BaseModel
-from typing import Dict, Any
+from typing import Dict, Optional, Any
 
 class Action(str, Enum):
     SOUND_WARD_ALARM = "SOUND_WARD_ALARM"
@@ -19,28 +19,32 @@ class Action(str, Enum):
 
 class Observation(BaseModel):
     spo2: float
-    heart_rate: float
-    blood_pressure_systolic: float
-    blood_pressure_diastolic: float
-    respiratory_rate: float
+    heart_rate: int
+    bp_systolic: int
+    bp_diastolic: int
+    resp_rate: int
     temperature: float
-    avpu: str  # 'Alert', 'Verbal', 'Pain', 'Unresponsive'
-    alarms_active: bool
-    equipment_status: str
-    patient_status_notes: str
+    consciousness: str  # AVPU scale
+    equipment_status: dict
+    power_status: str
+    time_elapsed: int
+    time_since_last_vitals_check: int
+    doctor_eta: Optional[int] = None
+    clinical_notes: str
+    last_action_feedback: str
+    step_count: int
 
 class Reward(BaseModel):
     reward: float
     message: str
 
-class StepResponse(BaseModel):
+class StepResult(BaseModel):
     observation: Observation
-    reward: Reward
+    reward: float
     done: bool
-    info: Dict[str, Any]
+    info: dict
 
-class ResetRequest(BaseModel):
+class ResetResult(BaseModel):
+    observation: Observation
     task_id: int
-
-class StepRequest(BaseModel):
-    action: Action
+    task_description: str
