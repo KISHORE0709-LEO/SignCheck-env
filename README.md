@@ -1,5 +1,24 @@
 # SignCheck-Env
 
+## Quick Start
+
+```bash
+# 1. Start the server
+uvicorn server.main:app --host 0.0.0.0 --port 7860
+
+# 2. Browse the interactive API docs
+open http://localhost:7860/docs
+
+# 3. Run the baseline LLM agent (requires HF_TOKEN / OPENAI key)
+MODEL_NAME=gpt-4o-mini HF_TOKEN=<your-key> python inference.py
+
+# 4. Run the heuristic debug simulator
+python playground.py --task 1
+
+# 5. Smoke-test all endpoints
+python test_env.py
+```
+
 ICU patient triage constitutes one of the most stressful, time-critical, and consequential domains in modern medicine. When physiological collapse occurs, there is an inherent delay—a "critical gap"—between the onset of an emergency and the arrival of a specialist physician. AI agents evaluating real-time vital streams must act as first-responders during this window, making sequence-critical decisions balancing life-saving interventions with the risk of causing iatrogenic harm. By embedding clinical language reasoning, stochastic event dynamics, and cascading false-alarms into an MDP framework, SignCheck-Env serves as a uniquely rigorous safety-critical benchmark.
 
 ## Environment Description

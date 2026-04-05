@@ -54,7 +54,7 @@ action_space:
   WAIT_AND_MONITOR: "Take no explicit physical action this step"
 
 reward:
-  min: 0.0
+  min: -1.0
   max: 1.0
   type: continuous
   description: "Per-step composite reward fusing vital stability delta, escalation logic, efficiency penalty, and action bonuses."
