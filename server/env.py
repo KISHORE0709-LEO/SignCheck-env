@@ -29,6 +29,12 @@ class SignCheckEnv:
         self.patient_outcome = PatientOutcome.STABLE
 
     def reset(self, task_id: int) -> ResetResult:
+        """
+        Loads the provided scenario baseline parameters into the physics engine
+        and resets all runtime variables (counters, timers, flags).
+        
+        Outputs the standard starting observation structure.
+        """
         self.task_id = task_id
         self.scenario = get_scenario(task_id)
         
@@ -155,6 +161,15 @@ class SignCheckEnv:
         return False, PatientOutcome.STABLE
 
     def step(self, action: Action) -> StepResult:
+        """
+        The core physics engine heartbeat.
+        Takes a verified Action enum integer mapping to apply:
+        1. Base drift mechanics + stochastic vital deviations
+        2. Escalation and medical response effects
+        3. Cascading consequences based on previous step vitals (MDP)
+        
+        Calculates and returns the isolated Reward array.
+        """
         if self.scenario is None:
             raise ValueError("Environment must be reset before stepping.")
             

@@ -32,6 +32,7 @@ if "passed" not in st.session_state:
     st.session_state.passed = None
 
 def fetch_state():
+    """Calls GET /state to poll any external server mutations."""
     try:
         r = requests.get(f"{BASE_URL}/state")
         if r.status_code == 200:
@@ -41,6 +42,7 @@ def fetch_state():
     return None
 
 def trigger_grade():
+    """Calls POST /grade and locally stores the final assessment output."""
     try:
         r = requests.post(f"{BASE_URL}/grade")
         if r.status_code == 200:
@@ -53,6 +55,10 @@ def trigger_grade():
         st.error(f"Failed to connect: {e}")
 
 def trigger_reset(task_id):
+    """
+    Requests the server to wipe and re-initialize the environment for a specific task.
+    Resets the historical dataframe rendering components internally.
+    """
     try:
         r = requests.post(f"{BASE_URL}/reset", json={"task_id": task_id})
         if r.status_code == 200:
@@ -70,6 +76,10 @@ def trigger_reset(task_id):
         st.error(f"Failed to connect to server: {e}")
 
 def trigger_step(action):
+    """
+    Submits a requested action payload to the server.
+    Takes the resultant StepResult to map new graph coordinates.
+    """
     if st.session_state.done:
         st.warning("Simulation is marked as done.")
         return

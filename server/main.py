@@ -31,6 +31,7 @@ class StepParams(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
+    """Initializes the environment internally on server startup."""
     global vital_log
     env.reset(1)
     vital_log = [copy.deepcopy(env.vitals)]
@@ -52,6 +53,10 @@ def get_tasks():
 
 @app.post("/reset", response_model=ResetResult)
 def reset_env(params: ResetParams):
+    """
+    Resets the environment to a specific Task ID.
+    Returns: initial Observation and task setup data.
+    """
     global vital_log
     try:
         res = env.reset(params.task_id)
@@ -62,6 +67,11 @@ def reset_env(params: ResetParams):
 
 @app.post("/step", response_model=StepResult)
 def step_env(params: StepParams):
+    """
+    Applies the specified Action to the state instance.
+    Calculates drift, triggers consequences, and scores the current turn.
+    Returns: new Observation, Reward, and Terminal Done flag.
+    """
     try:
         action_enum = Action(params.action)
     except ValueError:
@@ -76,10 +86,16 @@ def step_env(params: StepParams):
 
 @app.get("/state")
 def state():
+    """Returns the raw internal dictionary state (vitals, history, metadata)."""
     return env.state()
 
 @app.post("/grade", response_model=GradeResult)
 def grade():
+    """
+    Grades the entire previous episode based on final outcome, history, 
+    and task stability thresholds. 
+    Returns: Component metrics and final 0-1 score block.
+    """
     if env.scenario is None:
         raise HTTPException(status_code=400, detail="Environment not initialized.")
         
