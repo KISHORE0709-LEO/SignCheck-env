@@ -17,6 +17,13 @@ class Action(str, Enum):
     ADMINISTER_EMERGENCY_MED = "ADMINISTER_EMERGENCY_MED"
     WAIT_AND_MONITOR = "WAIT_AND_MONITOR"
 
+class PatientOutcome(str, Enum):
+    STABLE = "stable"
+    DETERIORATING = "deteriorating"  
+    CRITICAL = "critical"
+    DECEASED = "deceased"
+    SAVED = "saved"
+
 class Observation(BaseModel):
     spo2: float
     heart_rate: int
@@ -33,11 +40,14 @@ class Observation(BaseModel):
     clinical_notes: str
     last_action_feedback: str
     step_count: int
+    patient_outcome: PatientOutcome = PatientOutcome.STABLE
 
 class Reward(BaseModel):
     reward: float
     message: str
 
+# info dict will always contain:
+# {"survival": float, "stability": float, "escalation": float, "efficiency": float, "outcome": str}
 class StepResult(BaseModel):
     observation: Observation
     reward: float
