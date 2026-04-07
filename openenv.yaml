@@ -1,6 +1,7 @@
-name: signcheck_env
-version: "1.0.0"
-description: 'ICU patient monitoring simulation — AI first-responder in the critical gap between medical emergency and doctor arrival'
+name: signcheck-env
+version: "1.0"
+description: ICU emergency response environment where an AI agent stabilizes a deteriorating patient until a doctor arrives.
+entrypoint: server.main:app
 author: your-hf-username
 tags: [healthcare, real-world, sequential-decision, safety-critical, icu, triage]
 tasks:

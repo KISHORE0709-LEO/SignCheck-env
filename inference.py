@@ -9,7 +9,7 @@ from openai import OpenAI
 # ── Config ──────────────────────────────────────────────────
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME   = os.getenv("MODEL_NAME",   "gpt-4o-mini")
-API_KEY      = os.getenv("HF_TOKEN",     "")
+API_KEY      = os.getenv("HF_TOKEN")
 BASE_URL     = os.getenv("SIGNCHECK_URL","http://localhost:7860")
 MAX_STEPS    = 25
 
