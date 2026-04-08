@@ -9,6 +9,11 @@ pinned: false
 
 # SignCheck-Env: ICU Emergency Response RL Environment
 
+## Live Demo
+You can instantly test the environment online! Check out the live deployments:
+- **HuggingFace Space**: [SignCheck-Env on HuggingFace](https://huggingface.co/spaces/KISHORE0709-LEO/SignCheck-env)
+- **Swagger Interface**: Explore the `/docs` endpoint on the deployed space to interact with the API directly.
+
 ## The Problem
 Many patients in hospitals can deteriorate rapidly or even tragically pass away during unforeseen emergencies such as power failures, sudden equipment malfunctions, or when there is a delayed response from a doctor. In an Intensive Care Unit (ICU), seconds matter. When a crisis occurs, quick and clinically precise decisions are absolutely critical to keep the patient alive until qualified human help arrives.
 
@@ -78,3 +83,25 @@ You can easily test the environment manually using the interactive Swagger UI yo
    
 3. **Get Your Score**: 
    Once the episode completes (the `done` flag returns `true`), open the `POST /grade` endpoint, click **Try it out**, and hit **Execute** to see your final deterministic score based on the actions you took!
+
+## Technology Stack
+- **FastAPI**: For providing robust REST API endpoints.
+- **Python**: Core simulation logic and grading system.
+- **Docker**: Containerization for seamless deployment.
+- **OpenEnv framework**: Standardized RL environment over HTTP.
+- **HuggingFace Spaces**: Live deployment and hosting.
+
+## Available Agent Actions
+When interacting with the `/step` endpoint, the agent can send various valid actions to stabilize the patient, such as:
+- `CHECK_EQUIPMENT`: Inspect monitors and medical equipment to rule out false alarms or failures.
+- `WAIT_AND_MONITOR`: Observe the patient without intervening, allowing time to pass.
+- `ADJUST_OXYGEN_FLOW`: Increase or decrease oxygen supply based on current SpO2 levels.
+- `CALL_ICU_SPECIALIST`: Escalate the situation to an attending physician for expert intervention.
+- `CALL_CODE_BLUE`: Initiate a full cardiac arrest response to get immediate medical help.
+
+## Evaluation Criteria
+The grader automatically evaluates the agent based on several critical factors to calculate a deterministic final score:
+- **Patient Stability**: How effectively the agent maintains or restores vital signs (heart rate, SpO2, blood pressure) within safe clinical ranges.
+- **Response Efficiency**: The speed at which the agent identifies the crisis and takes appropriate, definitive action.
+- **Action Appropriateness**: Using the correct intervention for the specific scenario (e.g., proper escalation vs. manual intervention).
+- **Safety Guidelines**: Avoiding harmful or contrary actions that could further compromise or degrade the patient's physiological condition.
