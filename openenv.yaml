@@ -2,7 +2,7 @@ name: signcheck-env
 version: "1.0"
 description: ICU emergency response environment where an AI agent stabilizes a deteriorating patient until a doctor arrives.
 entrypoint: server.main:app
-author: your-hf-username
+author: KISHORE0709-LEO
 tags: [healthcare, real-world, sequential-decision, safety-critical, icu, triage]
 tasks:
   - id: power_failure
@@ -67,6 +67,6 @@ api:
   grade: "POST /grade"
 
 baseline_scores:
-  power_failure: 0.0
-  equipment_malfunction: 0.0
-  cardiac_event: 0.0
+  power_failure: 0.55
+  equipment_malfunction: 0.50
+  cardiac_event: 0.45

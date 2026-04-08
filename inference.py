@@ -10,7 +10,10 @@ from openai import OpenAI
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME   = os.getenv("MODEL_NAME",   "gpt-4o-mini")
 API_KEY      = os.getenv("HF_TOKEN")
-BASE_URL     = os.getenv("SIGNCHECK_URL","http://localhost:7860")
+BASE_URL     = os.getenv("SIGNCHECK_URL", "http://localhost:7860")
+
+if not os.getenv("SIGNCHECK_URL"):
+    print("[WARN] SIGNCHECK_URL not set — defaulting to http://localhost:7860", flush=True)
 MAX_STEPS    = 25
 
 ACTIONS = [
@@ -102,12 +105,12 @@ def get_model_action(client: OpenAI, obs: dict, step: int, last_reward: float, h
             temperature=0.0
         )
         raw = response.choices[0].message.content.strip().upper()
-        # Clean up any extra text
         for action in ACTIONS:
             if action in raw:
                 return action
         return "WAIT_AND_MONITOR"
     except Exception as e:
+        print(f"[ERROR] LLM failed: {e}", flush=True)
         return "WAIT_AND_MONITOR"
 
 # ── Task Runner ──────────────────────────────────────────────
@@ -126,6 +129,14 @@ def run_task(client: OpenAI, task_id: int) -> dict:
 
     log_start(str(task_id), task_name, MODEL_NAME)
 
+    # Log initial state via /state
+    try:
+        state_r = requests.get(f"{BASE_URL}/state", timeout=10)
+        if state_r.status_code == 200:
+            print(f"[INFO] Initial state fetched: outcome={state_r.json().get('patient_outcome','unknown')}", flush=True)
+    except Exception as e:
+        print(f"[WARN] /state fetch failed: {e}", flush=True)
+
     rewards        = []
     action_history = []
     last_reward    = 0.0
@@ -137,25 +148,31 @@ def run_task(client: OpenAI, task_id: int) -> dict:
         step += 1
         action = get_model_action(client, obs, step, last_reward, action_history)
 
-        try:
-            r = requests.post(f"{BASE_URL}/step", json={"action": action}, timeout=30)
-            r.raise_for_status()
-            step_data = r.json()
+        step_success = False
+        for attempt in range(2):
+            try:
+                r = requests.post(f"{BASE_URL}/step", json={"action": action}, timeout=30)
+                r.raise_for_status()
+                step_data = r.json()
 
-            obs         = step_data["observation"]
-            reward      = step_data["reward"]
-            done        = step_data["done"]
-            last_error  = step_data["info"].get("outcome") if done else None
-            last_reward = reward
+                obs         = step_data["observation"]
+                reward      = step_data["reward"]
+                done        = step_data["done"]
+                last_error  = step_data["info"].get("outcome") if done else None
+                last_reward = reward
 
-            rewards.append(reward)
-            action_history.append(action)
-            log_step(step, action, reward, done, None)
-
-        except Exception as e:
-            last_error = str(e)
-            log_step(step, action, 0.0, True, last_error)
-            break
+                rewards.append(reward)
+                action_history.append(action)
+                log_step(step, action, reward, done, None)
+                step_success = True
+                break
+            except Exception as e:
+                print(f"[ERROR] /step attempt {attempt+1} failed: {e}", flush=True)
+                if attempt == 1:
+                    log_step(step, action, 0.0, True, str(e))
+                    done = True
+                else:
+                    time.sleep(2)
 
     # Grade
     score = 0.0

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import copy
 
 from .env import SignCheckEnv
@@ -31,6 +31,8 @@ class ResetParams(BaseModel):
 
 class StepParams(BaseModel):
     action: str
+
+    model_config = {"json_schema_extra": {"example": {"action": "CHECK_EQUIPMENT"}}}
 
 @app.on_event("startup")
 def startup_event():
@@ -69,14 +71,15 @@ def get_tasks():
     } for s in scenarios]
 
 @app.post("/reset", response_model=ResetResult, summary="Start New Episode")
-def reset_env(params: ResetParams):
+def reset_env(params: Optional[ResetParams] = None):
     """
     Starts a new episode for the specified Task ID.
     Returns the initial patient observation and the scenario context.
     """
     global vital_log
+    task_id = params.task_id if params else 1
     try:
-        res = env.reset(params.task_id)
+        res = env.reset(task_id)
         vital_log = [copy.deepcopy(env.vitals)]
         return res
     except ValueError as e:
