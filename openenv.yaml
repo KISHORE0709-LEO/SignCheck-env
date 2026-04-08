@@ -3,6 +3,7 @@ version: "1.0"
 description: ICU emergency response environment where an AI agent stabilizes a deteriorating patient until a doctor arrives.
 entrypoint: server.main:app
 author: KISHORE0709-LEO
+runtime: docker
 tags: [healthcare, real-world, sequential-decision, safety-critical, icu, triage]
 tasks:
   - id: power_failure
