@@ -22,7 +22,7 @@ The simulation is built with a decoupled, container-friendly architecture. The s
 
 **Agent** (`inference.py`) → **FastAPI Server** (`server/main.py`) → **Environment** (`server/env.py`) → **Vitals Simulator** (`server/vitals.py`) → **Scenario Logic** (`server/scenarios.py`) → **Grader** (`server/grader.py`).
 
-## How to Run Locally
+## Quick Start
 
 Follow these simple steps to run the simulation and test the baseline agent on your machine.
 
@@ -42,7 +42,10 @@ Follow these simple steps to run the simulation and test the baseline agent on y
     uvicorn server.main:app --port 7860
     ```
 
-4.  **Run the demo inference agent (in a new terminal):**
+4.  **View API Documentation:**
+    Open [http://127.0.0.1:7860/docs](http://127.0.0.1:7860/docs) in your browser to view the interactive FastAPI documentation.
+
+5.  **Run the demo inference agent (in a new terminal):**
     ```bash
     python inference.py
     ```

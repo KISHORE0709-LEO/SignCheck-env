@@ -40,6 +40,15 @@ def startup_event():
 def health():
     return {"status": "ok"}
 
+@app.get("/")
+def root():
+    return {
+        "message": "Welcome to SignCheck-Env: ICU Emergency Response RL Environment",
+        "docs_url": "/docs",
+        "endpoints": ["/reset", "/step", "/state", "/grade", "/tasks"]
+    }
+
+
 @app.get("/tasks")
 def get_tasks():
     scenarios = get_all_scenarios()
