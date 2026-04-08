@@ -11,10 +11,13 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v
 MODEL_NAME   = os.getenv("MODEL_NAME",   "mistralai/Mistral-7B-Instruct-v0.3")
 API_KEY      = os.getenv("HF_TOKEN")
 BASE_URL     = os.getenv("SIGNCHECK_URL", "http://localhost:7860")
+MAX_STEPS    = 25
 
+if not API_KEY:
+    print("[ERROR] HF_TOKEN is not set. Exiting.", flush=True)
+    sys.exit(1)
 if not os.getenv("SIGNCHECK_URL"):
     print("[WARN] SIGNCHECK_URL not set — defaulting to http://localhost:7860", flush=True)
-MAX_STEPS    = 25
 
 ACTIONS = [
     "SOUND_WARD_ALARM", "CALL_ATTENDING_DOCTOR", "CALL_ICU_SPECIALIST",
@@ -122,6 +125,8 @@ def run_task(client: OpenAI, task_id: int) -> dict:
         reset_data = r.json()
     except Exception as e:
         print(f"[ERROR] Failed to reset task {task_id}: {e}", flush=True)
+        log_start(str(task_id), "unknown", MODEL_NAME)
+        log_end(False, 0, 0.0, [])
         return {"task_id": task_id, "score": 0.0, "success": False, "steps": 0}
 
     obs       = reset_data["observation"]
